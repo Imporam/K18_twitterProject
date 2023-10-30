@@ -13,6 +13,7 @@ import {
 import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
 import HTTP_STATUS from '~/constants/http.Status'
+import { UserVerifyStatus } from '~/constants/enums'
 export const loginController = async (req: Request<ParamsDictionary, any, LoginReqBody>, res: Response) => {
   //vào req lấy user ra, lấy _id của user đó
   const user = req.user as User
@@ -72,4 +73,28 @@ export const emailVerifyController = async (req: Request<ParamsDictionary, any, 
     message: USERS_MESSAGES.EMAIL_VERIFY_SUCCESS,
     result
   })
+}
+
+export const resendEmailVerifyController = async (req: Request, res: Response) => {
+  //nếu qua được hàm này tức là đã qua được accessTokenValidator
+  //req đã có decoded_authorization
+  const { user_id } = req.decoded_authorization as TokenPayload
+  //tìm user có ở đây ko
+  const user = await databaseService.users.findOne({ _id: new ObjectId(user_id) })
+  //nếu ko có user thì res lỗi
+  if (user === null) {
+    return res.status(HTTP_STATUS.NOT_FOUND).json({
+      message: USERS_MESSAGES.USER_NOT_FOUND
+    })
+  }
+  //nếu có thì xem thử nó đã verify chưa
+
+  if (user.verify === UserVerifyStatus.Verified) {
+    return res.json({ message: USERS_MESSAGES.EMAIL_ALREADY_VERIFIED_BEFORE })
+  }
+
+  //nếu mà xuống đc đây nghĩa là user này chưa verify, và bị mất email_verify_token
+  //tiến hành tạo mới email_verify_token và lưu vào database
+  const result = await userService.resendEmailVerify(user_id)
+  return res.json(result)
 }

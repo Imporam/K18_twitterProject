@@ -1,5 +1,10 @@
 import { Router } from 'express'
-import { emailVerifyController, loginController, logoutController } from '~/controllers/users.controllers'
+import {
+  emailVerifyController,
+  loginController,
+  logoutController,
+  resendEmailVerifyController
+} from '~/controllers/users.controllers'
 import {
   accessTokenValidator,
   emailVerifyValidator,
@@ -42,7 +47,6 @@ method: POST
 Header: {Authorization: 'Bearer <access_token>'}
 body: {refesh_token: string}*/
 usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, wrapAsync(logoutController))
-export default usersRouter
 
 /*des: verify email,
 khi người dùng đăng ký, trong email của họ sẽ có 1 link
@@ -57,3 +61,20 @@ usersRouter.post('/verify-email', emailVerifyValidator, wrapAsync(emailVerifyCon
 //hàm bình thường có thể dùng next và throw Error
 //Còn hàm async thì chỉ next không được throw
 //      nếu muốn throw thì phải dùng try catch và sau khi catch được thì phải next Error
+
+/*
+des: resend email verify
+mehtod: POST
+headers: {Authorization: Bearer <access_token>} */
+usersRouter.post('/resend-verify-email', accessTokenValidator, wrapAsync(resendEmailVerifyController))
+
+/*
+des: cung cấp email để reset password, gữi email cho người dùng
+path: /forgot-password
+method: POST
+Header: không cần, vì  ngta quên mật khẩu rồi, thì sao mà đăng nhập để có authen đc
+body: {email: string}
+*/
+//usersRouter.post('/forgot-password', forgotPasswordValidator, wrapAsync(forgotPasswordController))
+
+export default usersRouter
