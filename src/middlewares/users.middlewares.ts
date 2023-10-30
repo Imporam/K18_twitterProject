@@ -218,7 +218,10 @@ export const accessTokenValidator = validate(
             }
             //1. verify cái access_token này xem có phải là của server ko?
             try {
-              const decoded_authorization = await verifyToken({ token: access_token })
+              const decoded_authorization = await verifyToken({
+                token: access_token,
+                secretOrPublickey: process.env.JWT_SECRET_ACCESS_TOKEN as string
+              })
               ;(req as Request).decoded_authorization = decoded_authorization
               req.decoded_authorization = decoded_authorization
             } catch (error) {
@@ -250,7 +253,7 @@ export const refreshTokenValidator = validate(
             //1. verify cái refresh_token này xem có phải là của server ko?
             try {
               const [decoded_refresh_token, refesh_token] = await Promise.all([
-                verifyToken({ token: value }),
+                verifyToken({ token: value, secretOrPublickey: process.env.JWT_SECRET_REFRESH_TOKEN as string }),
                 databaseService.refreshTokens.findOne({ token: value })
               ])
               if (refesh_token === null) {
