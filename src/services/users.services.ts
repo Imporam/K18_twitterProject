@@ -3,7 +3,7 @@ import databaseService from './database.services'
 import { RegisterReqBody } from '~/models/requests/User.request'
 import { hashPassword } from '~/utils/crypto'
 import { signToken } from '~/utils/jwt'
-import { TokenType } from '~/constants/enums'
+import { TokenType, UserVerifyStatus } from '~/constants/enums'
 import RefreshToken from '~/models/schemas/RefreshToken.schema'
 import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
@@ -29,17 +29,19 @@ class UserService {
   }
 
   async register(payLoad: RegisterReqBody) {
+    const user_id = new ObjectId()
+    const email_verify_token = await this.signEmailVerifyToken(user_id.toString())
     const result = await databaseService.users.insertOne(
       new User({
         ...payLoad,
+        _id: user_id,
+        email_verify_token,
         date_of_birth: new Date(payLoad.date_of_birth),
         password: hashPassword(payLoad.password)
       })
     )
-    //lấy user_id từ account vừa tạo
-    const user_id = result.insertedId.toString()
     //từ user_id tạo ra access token và 1 refresh token
-    const [access_token, refresh_token] = await this.signAccessAndRefreshToken(user_id)
+    const [access_token, refresh_token] = await this.signAccessAndRefreshToken(user_id.toString())
     //lưu vào database
     await databaseService.refreshTokens.insertOne(
       new RefreshToken({
@@ -47,6 +49,9 @@ class UserService {
         user_id: new ObjectId(user_id)
       })
     )
+    //giả lập gửi mail cho verify_token này cho user
+    console.log(email_verify_token)
+
     return { access_token, refresh_token }
   }
   async checkEmailExist(email: string) {
@@ -76,6 +81,46 @@ class UserService {
     return {
       message: USERS_MESSAGES.LOGOUT_SUCCESS
     }
+  }
+
+  private signEmailVerifyToken(user_id: string) {
+    return signToken({
+      payLoad: { user_id, token_type: TokenType.EmailVerifycationToken },
+      options: { expiresIn: process.env.EMAIL_VERIFY_TOKEN_EXPIRE_IN },
+      privateKey: process.env.JWT_SECRET_EMAIL_VERIFY_TOKEN as string
+    })
+  }
+
+  async verifyEmail(user_id: string) {
+    //tạo access_token và refresh_token gửi cho client và lưu refresh_token vào database
+    //đồng thời tìm user và update lại email_verify_token thành '', verify: 1, updateAt
+    const [token] = await Promise.all([
+      this.signAccessAndRefreshToken(user_id),
+      databaseService.users.updateOne(
+        {
+          _id: new ObjectId(user_id) //tìm user thông qua user_id
+        },
+        [
+          {
+            $set: {
+              email_verify_token: '',
+              verify: UserVerifyStatus.Verified,
+              updated_at: '$$NOW'
+            }
+          }
+        ]
+      )
+    ])
+    //destucturing token
+    const [access_token, refresh_token] = token
+    //lưu refresh token vào database
+    await databaseService.refreshTokens.insertOne(
+      new RefreshToken({
+        token: refresh_token,
+        user_id: new ObjectId(user_id)
+      })
+    )
+    return { access_token, refresh_token }
   }
 }
 

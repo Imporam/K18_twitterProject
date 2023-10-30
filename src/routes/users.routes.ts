@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { loginController, logoutController } from '~/controllers/users.controllers'
+import { emailVerifyController, loginController, logoutController } from '~/controllers/users.controllers'
 import {
   accessTokenValidator,
+  emailVerifyValidator,
   loginValidator,
   refreshTokenValidator,
   registerValidator
@@ -42,6 +43,16 @@ Header: {Authorization: 'Bearer <access_token>'}
 body: {refesh_token: string}*/
 usersRouter.post('/logout', accessTokenValidator, refreshTokenValidator, wrapAsync(logoutController))
 export default usersRouter
+
+/*des: verify email,
+khi người dùng đăng ký, trong email của họ sẽ có 1 link
+trong link này đã setup sẵn 1 request kèm email_verify_token
+thì verify email là cái route cho request đó
+method: POST
+path: /users/verify-email
+body: {email_verify_token: string}
+*/
+usersRouter.post('/verify-email', emailVerifyValidator, wrapAsync(emailVerifyController))
 
 //hàm bình thường có thể dùng next và throw Error
 //Còn hàm async thì chỉ next không được throw
