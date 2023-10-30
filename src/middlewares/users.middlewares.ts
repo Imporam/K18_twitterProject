@@ -13,6 +13,8 @@ import userService from '~/services/users.services'
 import { hashPassword } from '~/utils/crypto'
 import { verifyToken } from '~/utils/jwt'
 import { validate } from '~/utils/validation'
+import { wrapAsync } from '~/utils/handlers'
+import { ObjectId } from 'mongodb'
 
 //1 ai đó truy cập vào /login
 // client sẽ gửi cho mình username và password
@@ -314,3 +316,98 @@ export const emailVerifyValidator = validate(
     ['body']
   )
 )
+
+export const forgotPasswordValidator = validate(
+  checkSchema({
+    email: {
+      notEmpty: {
+        errorMessage: USERS_MESSAGES.EMAIL_IS_REQUIRED
+      },
+      isEmail: {
+        errorMessage: USERS_MESSAGES.EMAIL_IS_INVALID
+      },
+      trim: true,
+      custom: {
+        options: async (value, { req }) => {
+          //tìm user có email này
+          const user = await databaseService.users.findOne({ email: value })
+          //nếu ko có thì sao mà gửi, trả ra res lỗi
+          if (user === null) {
+            throw new Error(USERS_MESSAGES.USER_NOT_FOUND)
+          }
+          //nếu có user thì lưu lại vào req
+          req.user = user
+          return true
+        }
+      }
+    }
+  })
+)
+
+export const verifyForgotPasswordTokenValidator = validate(
+  checkSchema(
+    {
+      forgot_password_token: {
+        trim: true,
+        custom: {
+          options: async (value, { req }) => {
+            //nếu k truyền lên forgot_password_token thì ta sẽ throw error
+            if (!value) {
+              throw new ErrorWithStatus({
+                message: USERS_MESSAGES.FORGOT_PASSWORD_TOKEN_IS_REQUIRED,
+                status: HTTP_STATUS.UNAUTHORIZED //401
+              })
+            }
+            //vào messages.ts thêm  FORGOT_PASSWORD_TOKEN_IS_REQUIRED: 'Forgot password token is required'
+            //nếu có thì decode nó để lấy đc thông tin của người dùng
+            try {
+              const decoded_forgot_password_token = await verifyToken({
+                token: value,
+                secretOrPublickey: process.env.JWT_SECRET_FORGOT_PASSWORD_TOKEN as string
+              })
+              //lưu decoded_forgot_password_token vào req để khi nào muốn biết ai gữi req thì dùng
+              ;(req as Request).decoded_forgot_password_token = decoded_forgot_password_token
+              //vào type.d.ts thêm decoded_forgot_password_token?: TokenPayload cho Request
+              //dùng user_id trong decoded_forgot_password_token để tìm user trong database
+              //sẽ nhanh hơn là dùng forgot_password_token(value) để tìm user trong database
+              const { user_id } = decoded_forgot_password_token
+              const user = await databaseService.users.findOne({
+                _id: new ObjectId(user_id)
+              })
+              //nếu k tìm đc user thì throw error
+              if (user === null) {
+                throw new ErrorWithStatus({
+                  message: USERS_MESSAGES.USER_NOT_FOUND,
+                  status: HTTP_STATUS.UNAUTHORIZED //401
+                })
+              }
+              //nếu forgot_password_token đã được sử dụng rồi thì throw error
+              //forgot_password_token truyền lên khác với forgot_password_token trong database
+              //nghĩa là người dùng đã sử dụng forgot_password_token này rồi
+              if (user.forgot_password_token !== value) {
+                throw new ErrorWithStatus({
+                  message: USERS_MESSAGES.INVALID_FORGOT_PASSWORD_TOKEN,
+                  status: HTTP_STATUS.UNAUTHORIZED //401
+                })
+              }
+              //trong messages.ts thêm   INVALID_FORGOT_PASSWORD_TOKEN: 'Invalid forgot password token'
+            } catch (error) {
+              if (error instanceof JsonWebTokenError) {
+                throw new ErrorWithStatus({
+                  message: capitalize((error as JsonWebTokenError).message),
+                  status: HTTP_STATUS.UNAUTHORIZED //401
+                })
+              }
+              throw error
+            }
+            return true
+          }
+        }
+      }
+    },
+    ['body']
+  )
+)
+
+//không nên vào database và xóa luôn forgot_password_token của account
+//vì đôi khi họ click vào link , chưa kịp đổi mk thì họ bận gì đó, họ click lại sau

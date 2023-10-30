@@ -139,6 +139,39 @@ class UserService {
       message: USERS_MESSAGES.RESEND_VERIFY_EMAIL_SUCCESS
     }
   }
+
+  //tạo hàm signForgotPasswordToken
+  private signForgotPasswordToken(user_id: string) {
+    return signToken({
+      payLoad: { user_id, token_type: TokenType.ForgotPasswordToken },
+      options: { expiresIn: process.env.FORGOT_PASSWORD_TOKEN_EXPIRE_IN },
+      privateKey: process.env.JWT_SECRET_FORGOT_PASSWORD_TOKEN as string //thêm
+    })
+  }
+  //vào .env thêm 2 biến môi trường FORGOT_PASSWORD_TOKEN_EXPIRE_IN, và JWT_SECRET_FORGOT_PASSWORD_TOKEN
+  //JWT_SECRET_FORGOT_PASSWORD_TOKEN = '123!@#22'
+  //FORGOT_PASSWORD_TOKEN_EXPIRE_IN = '7d'
+
+  async forgotPassword(user_id: string) {
+    //tạo ra forgot_password_token
+    const forgot_password_token = await this.signForgotPasswordToken(user_id)
+    //cập nhật vào forgot_password_token và user_id
+    await databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
+      {
+        $set: { forgot_password_token: forgot_password_token, updated_at: '$$NOW' }
+      }
+    ])
+    //gữi email cho người dùng đường link có cấu trúc như này
+    //http://appblabla/forgot-password?token=xxxx
+    //xxxx trong đó xxxx là forgot_password_token
+    //sau này ta sẽ dùng aws để làm chức năng gữi email, giờ ta k có
+    //ta log ra để test
+    console.log('forgot_password_token: ', forgot_password_token)
+    return {
+      message: USERS_MESSAGES.CHECK_EMAIL_TO_RESET_PASSWORD
+    }
+  }
+  //vào messages.ts thêm CHECK_EMAIL_TO_RESET_PASSWORD: 'Check email to reset password'
 }
 const userService = new UserService()
 export default userService
