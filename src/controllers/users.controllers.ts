@@ -11,18 +11,23 @@ import {
   TokenPayload,
   ForgotPasswordReqBody,
   VerifyForgotPasswordReqBody,
-  ResetPasswordReqBody
+  ResetPasswordReqBody,
+  UpdateMeReqBody
 } from '~/models/requests/User.request'
 import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
 import HTTP_STATUS from '~/constants/http.Status'
 import { UserVerifyStatus } from '~/constants/enums'
+import { pick } from 'lodash'
 export const loginController = async (req: Request<ParamsDictionary, any, LoginReqBody>, res: Response) => {
   //vào req lấy user ra, lấy _id của user đó
   const user = req.user as User
   const user_id = user._id as ObjectId
   //dùng cái user_id đó tạo access và refresh_token
-  const result = await userService.login(user_id.toString())
+  const result = await userService.login({
+    user_id: user_id.toString(),
+    verify: user.verify
+  })
   //nếu ko bug gì thì thành công
   return res.status(200).json({
     message: USERS_MESSAGES.LOGIN_SUCCESS,
@@ -108,10 +113,10 @@ export const forgotPasswordController = async (
   next: NextFunction
 ) => {
   //middleware forgotPasswordValidator đã chạy rồi, nên ta có thể lấy _id từ user đã tìm đc bằng email
-  const { _id } = req.user as User
+  const { _id, verify } = req.user as User
   //cái _id này là objectid, nên ta phải chuyển nó về string
   //chứ không truyền trực tiếp vào hàm forgotPassword
-  const result = await userService.forgotPassword((_id as ObjectId).toString())
+  const result = await userService.forgotPassword({ user_id: (_id as ObjectId).toString(), verify })
   return res.json(result)
 }
 
@@ -151,3 +156,33 @@ export const getMeController = async (req: Request, res: Response, next: NextFun
     result: user
   })
 }
+
+export const updateMeController = async (
+  req: Request<ParamsDictionary, any, UpdateMeReqBody>,
+  res: Response,
+  next: NextFunction
+) => {
+  //middleware accessTokenValidator đã chạy rồi, nên ta có thể lấy đc user_id từ decoded_authorization
+  const { user_id } = req.decoded_authorization as TokenPayload
+  const body = req.body
+  //user_id để biết phải cập nhật ai
+  //lấy thông tin mới từ req.body
+  //lấy các property mà client muốn cập nhật
+  //ta sẽ viết hàm updateMe trong user.services
+  //nhận vào user_id và body để cập nhật
+  const result = await userService.updateMe(user_id, body)
+  return res.json({
+    message: USERS_MESSAGES.UPDATE_ME_SUCCESS, //meesage.ts thêm  UPDATE_ME_SUCCESS: 'Update me success'
+    result
+  })
+}
+
+export const getProfileController = async (req: Request, res: Response, next: NextFunction) => {
+  const { username } = req.params //lấy username từ query params
+  const result = await userService.getProfile(username)
+  return res.json({
+    message: USERS_MESSAGES.GET_PROFILE_SUCCESS, //message.ts thêm  GET_PROFILE_SUCCESS: 'Get profile success',
+    result
+  })
+}
+//usersService.getProfile(username) nhận vào username tìm và return ra ngoài, hàm này chưa viết
