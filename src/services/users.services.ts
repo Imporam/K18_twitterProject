@@ -29,8 +29,8 @@ class UserService {
   }
 
   async register(payLoad: RegisterReqBody) {
-    const user_id = new ObjectId()
-    const email_verify_token = await this.signEmailVerifyToken(user_id.toString())
+    const user_id = new ObjectId() //tạo mã trước
+    const email_verify_token = await this.signEmailVerifyToken(user_id.toString()) //kí email
     const result = await databaseService.users.insertOne(
       new User({
         ...payLoad,
@@ -172,6 +172,42 @@ class UserService {
     }
   }
   //vào messages.ts thêm CHECK_EMAIL_TO_RESET_PASSWORD: 'Check email to reset password'
+
+  async resetPassword({ user_id, password }: { user_id: string; password: string }) {
+    //tìm user thông qua user_id và cập nhật lại password và forgot_password_token
+    //tất nhiên là lưu password đã hash rồi
+    //ta không cần phải kiểm tra user có tồn tại không, vì forgotPasswordValidator đã làm rồi
+    databaseService.users.updateOne({ _id: new ObjectId(user_id) }, [
+      {
+        $set: {
+          password: hashPassword(password),
+          forgot_password_token: '',
+          updated_at: '$$NOW'
+        }
+      }
+    ])
+    //nếu bạn muốn ngta đổi mk xong tự động đăng nhập luôn thì trả về access_token và refresh_token
+    //ở đây mình chỉ cho ngta đổi mk thôi, nên trả về message
+    return {
+      message: USERS_MESSAGES.RESET_PASSWORD_SUCCESS
+    }
+  }
+
+  async getMe(user_id: string) {
+    const user = await databaseService.users.findOne(
+      { _id: new ObjectId(user_id) },
+      {
+        projection: {
+          password: 0,
+          email_verify_token: 0,
+          forgot_password_token: 0
+        }
+      }
+    )
+    return user // sẽ k có những thuộc tính nêu trên, tránh bị lộ thông tin
+  }
+
+  //trong dó projection giúp ta loại bỏ lấy về các thuộc tính như password, email_verify_token, forgot_password_token
 }
 const userService = new UserService()
 export default userService

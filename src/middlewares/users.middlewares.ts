@@ -1,7 +1,7 @@
 ///import các interface để định dạng kiểu cho para của middlewares
 import { registerController } from '~/controllers/users.controllers'
 import { Request, Response, NextFunction } from 'express'
-import { checkSchema } from 'express-validator'
+import { ParamSchema, checkSchema } from 'express-validator'
 import { JsonWebTokenError } from 'jsonwebtoken'
 import { capitalize } from 'lodash'
 import HTTP_STATUS from '~/constants/http.Status'
@@ -15,6 +15,71 @@ import { verifyToken } from '~/utils/jwt'
 import { validate } from '~/utils/validation'
 import { wrapAsync } from '~/utils/handlers'
 import { ObjectId } from 'mongodb'
+import { TokenPayload } from '~/models/requests/User.request'
+
+//tạo hàm để tái sử dụng
+const passwordSchema: ParamSchema = {
+  notEmpty: {
+    errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
+  },
+  isString: {
+    errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
+  },
+  isLength: {
+    options: {
+      min: 8,
+      max: 50
+    },
+    errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
+  },
+  isStrongPassword: {
+    options: {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1
+      // returnScore: false
+      // false : chỉ return true nếu password mạnh, false nếu k
+      // true : return về chất lượng password(trên thang điểm 10)
+    }
+  },
+  errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
+}
+
+const confirmPasswordSchema: ParamSchema = {
+  notEmpty: {
+    errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_IS_REQUIRED
+  },
+  isString: {
+    errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_A_STRING
+  },
+  isLength: {
+    options: {
+      min: 8,
+      max: 50
+    },
+    errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
+  },
+  isStrongPassword: {
+    options: {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1
+    },
+    errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_STRONG
+  },
+  custom: {
+    options: (value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error(USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_THE_SAME_AS_PASSWORD)
+      }
+      return true
+    }
+  }
+}
 
 //1 ai đó truy cập vào /login
 // client sẽ gửi cho mình username và password
@@ -126,67 +191,8 @@ export const registerValidator = validate(
           }
         }
       },
-      password: {
-        notEmpty: {
-          errorMessage: USERS_MESSAGES.PASSWORD_IS_REQUIRED
-        },
-        isString: {
-          errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_A_STRING
-        },
-        isLength: {
-          options: {
-            min: 8,
-            max: 50
-          },
-          errorMessage: USERS_MESSAGES.PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
-        },
-        isStrongPassword: {
-          options: {
-            minLength: 8,
-            minLowercase: 1,
-            minUppercase: 1,
-            minNumbers: 1,
-            minSymbols: 1
-            // returnScore: false
-            // false : chỉ return true nếu password mạnh, false nếu k
-            // true : return về chất lượng password(trên thang điểm 10)
-          },
-          errorMessage: USERS_MESSAGES.PASSWORD_MUST_BE_STRONG
-        }
-      },
-      confirm_password: {
-        notEmpty: {
-          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_IS_REQUIRED
-        },
-        isString: {
-          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_A_STRING
-        },
-        isLength: {
-          options: {
-            min: 8,
-            max: 50
-          },
-          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_LENGTH_MUST_BE_FROM_8_TO_50
-        },
-        isStrongPassword: {
-          options: {
-            minLength: 8,
-            minLowercase: 1,
-            minUppercase: 1,
-            minNumbers: 1,
-            minSymbols: 1
-          },
-          errorMessage: USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_STRONG
-        },
-        custom: {
-          options: (value, { req }) => {
-            if (value !== req.body.password) {
-              throw new Error(USERS_MESSAGES.CONFIRM_PASSWORD_MUST_BE_THE_SAME_AS_PASSWORD)
-            }
-            return true
-          }
-        }
-      },
+      password: passwordSchema,
+      confirm_password: confirmPasswordSchema,
       date_of_birth: {
         isISO8601: {
           options: {
@@ -297,6 +303,7 @@ export const emailVerifyValidator = validate(
                 token: value,
                 secretOrPublickey: process.env.JWT_SECRET_EMAIL_VERIFY_TOKEN as string
               })
+              //sau khi verify ta đc payload của email_verify_token
               ;(req as Request).decoded_email_verify_token = decoded_email_verify_token
               //req.decoded_authorization = decoded_refresh_token
             } catch (error) {
@@ -370,7 +377,7 @@ export const verifyForgotPasswordTokenValidator = validate(
               //vào type.d.ts thêm decoded_forgot_password_token?: TokenPayload cho Request
               //dùng user_id trong decoded_forgot_password_token để tìm user trong database
               //sẽ nhanh hơn là dùng forgot_password_token(value) để tìm user trong database
-              const { user_id } = decoded_forgot_password_token
+              const { user_id } = decoded_forgot_password_token as TokenPayload
               const user = await databaseService.users.findOne({
                 _id: new ObjectId(user_id)
               })
@@ -411,3 +418,13 @@ export const verifyForgotPasswordTokenValidator = validate(
 
 //không nên vào database và xóa luôn forgot_password_token của account
 //vì đôi khi họ click vào link , chưa kịp đổi mk thì họ bận gì đó, họ click lại sau
+
+export const resetPasswordValidator = validate(
+  checkSchema(
+    {
+      password: passwordSchema,
+      confirm_password: confirmPasswordSchema
+    },
+    ['body']
+  )
+)

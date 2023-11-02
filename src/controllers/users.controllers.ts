@@ -10,7 +10,8 @@ import {
   EmailVerifyReqBody,
   TokenPayload,
   ForgotPasswordReqBody,
-  VerifyForgotPasswordReqBody
+  VerifyForgotPasswordReqBody,
+  ResetPasswordReqBody
 } from '~/models/requests/User.request'
 import { ObjectId } from 'mongodb'
 import { USERS_MESSAGES } from '~/constants/messages'
@@ -61,7 +62,7 @@ export const emailVerifyController = async (req: Request<ParamsDictionary, any, 
     })
   }
   //nếu có user đó thì mình sẽ kiểm tra user đó lưu email_verify_token ko?
-  if (user.email_verify_token === '') {
+  if (user.verify === UserVerifyStatus.Verified && user.email_verify_token === '') {
     return res.json({
       message: USERS_MESSAGES.EMAIL_ALREADY_VERIFIED_BEFORE
     })
@@ -128,3 +129,25 @@ export const verifyForgotPasswordTokenController = async (
   })
 }
 //trong messages.ts thêm   VERIFY_FORGOT_PASSWORD_TOKEN_SUCCESS: 'Verify forgot password token success'
+//Request<ParamsDictionary, any, > khi nào trong hàm có truy cập đến body
+export const resetPasswordController = async (
+  req: Request<ParamsDictionary, any, ResetPasswordReqBody>,
+  res: Response
+) => {
+  const { user_id } = req.decoded_forgot_password_token as TokenPayload
+  const { password } = req.body
+  //dùng user_id đó để tìm user và update lại password
+  const result = await userService.resetPassword({ user_id, password })
+  return res.json(result)
+}
+
+export const getMeController = async (req: Request, res: Response, next: NextFunction) => {
+  //middleware accessTokenValidator đã chạy rồi, nên ta có thể lấy đc user_id từ decoded_authorization
+  const { user_id } = req.decoded_authorization as TokenPayload
+  //vào database tìm user có user_id này dudwa cho client
+  const user = await userService.getMe(user_id) // hàm này ta chưa code, nhưng nó dùng user_id tìm user và trả ra user đó
+  return res.json({
+    message: USERS_MESSAGES.GET_ME_SUCCESS,
+    result: user
+  })
+}
