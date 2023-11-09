@@ -1,24 +1,32 @@
 import { Router } from 'express'
 import {
+  changePasswordController,
   emailVerifyController,
+  followController,
   forgotPasswordController,
   getMeController,
   getProfileController,
   loginController,
   logoutController,
+  oAuthController,
+  refreshTokenController,
   resendEmailVerifyController,
   resetPasswordController,
+  unfollowController,
   updateMeController,
   verifyForgotPasswordTokenController
 } from '~/controllers/users.controllers'
 import {
   accessTokenValidator,
+  changePasswordValidator,
   emailVerifyValidator,
+  followValidator,
   forgotPasswordValidator,
   loginValidator,
   refreshTokenValidator,
   registerValidator,
   resetPasswordValidator,
+  unfollowValidator,
   updateMeValidator,
   verifiedUserValidator,
   verifyForgotPasswordTokenValidator
@@ -48,7 +56,7 @@ const usersRouter = Router()
 //   }
 // )
 //---------------------------------------------------
-usersRouter.get('/login', loginValidator, wrapAsync(loginController))
+usersRouter.post('/login', loginValidator, wrapAsync(loginController))
 //usersRouter.post('/register', registerVaidator, registerController)
 
 usersRouter.post('/register', registerValidator, wrapAsync(registerController))
@@ -153,4 +161,61 @@ không cần header vì, chưa đăng nhập cũng có thể xem
 */
 usersRouter.get('/:username', wrapAsync(getProfileController))
 //chưa có controller getProfileController, nên bây giờ ta làm
+
+//tạo route follow
+/*
+des: Follow someone
+path: '/follow'
+method: post
+headers: {Authorization: Bearer <access_token>}
+body: {followed_user_id: string}
+*/
+usersRouter.post('/follow', accessTokenValidator, verifiedUserValidator, followValidator, wrapAsync(followController))
+
+/*
+    des: unfollow someone
+    path: '/follow/:user_id'
+    method: delete
+    headers: {Authorization: Bearer <access_token>}
+  g}
+    */
+usersRouter.delete(
+  '/unfollow/:user_id',
+  accessTokenValidator,
+  verifiedUserValidator,
+  unfollowValidator,
+  wrapAsync(unfollowController)
+)
+
+//unfollowValidator: kiểm tra user_id truyền qua params có hợp lệ hay k?
+/*
+  des: change password
+  path: '/change-password'
+  method: PUT
+  headers: {Authorization: Bearer <access_token>}
+  Body: {old_password: string, password: string, confirm_password: string}
+g}
+  */
+usersRouter.put(
+  '/change-password',
+  accessTokenValidator,
+  verifiedUserValidator,
+  changePasswordValidator,
+  wrapAsync(changePasswordController)
+)
+//changePasswordValidator kiểm tra các giá trị truyền lên trên body cớ valid k ?
+
+/*
+  des: refreshtoken
+  path: '/refresh-token'
+  method: POST
+  Body: {refresh_token: string}
+g}
+  */
+usersRouter.post('/refresh_token', refreshTokenValidator, wrapAsync(refreshTokenController))
+//khỏi kiểm tra accesstoken, tại nó hết hạn rồi mà
+//refreshController chưa làm
+
+usersRouter.get('/oauth/google', wrapAsync(oAuthController))
+
 export default usersRouter
